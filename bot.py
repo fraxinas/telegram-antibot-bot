@@ -481,15 +481,19 @@ class message_new_chat_members:
 	def reply(self, member):
 		# create verify part of prompt
 		verifyPrompt = json.dumps({
-			"inline_keyboard":[[{"text": "I'm not a robot!", "callback_data": str(member['id'])+str(self.chat['id'])+"Success"}]]})
+			"inline_keyboard": [[{"text": "Ich möchte beitreten", "callback_data": str(member['id'])+str(self.chat['id'])+"Success"}]]})
 		# create welcome text part of prompt
+		entities = []
 		if newUsers[member['id'] + self.chat['id']]['username'] != None:
-			welcomeMsg = "Hiya, @" + newUsers[member['id'] + self.chat['id']]['username'] + "%0A%0ATo proceed, please tap the %27I%27m not a robot%21%27 button, within the next%20" + str(int(config.getCustomGroupConfig(self.chat['id'])['unValidatedTimeToKick']/60)) + "%20minutes!%0A%0AOnce done, you%27ll have around%20" + str(config.getCustomGroupConfig(self.chat['id'])['timeToRestrict']) + "%20seconds of full restrictions, then%20" + str(int(config.getCustomGroupConfig(self.chat['id'])['validatedTimeToKick']/60)) + "%20minutes to send a message%20%3A%29"
-			welcome = sendRequest(["sendMessage", "chat_id", self.chat_id, "text", welcomeMsg, "entities", "[{'type':'mention', 'offset':6, 'length':" + str(len(member['username'])) + "}]" ,"reply_markup", verifyPrompt])
+			username = "@" + newUsers[member['id'] + self.chat['id']]['username']
+			entities = ["entities", "[{'type':'mention', 'offset':6, 'length':" + str(len(member['username'])) + "}]"]
 		else:
-			welcomeMsg = "Hiya, " + newUsers[member['id'] + self.chat['id']]['firstName'] + "%0A%0ATo proceed, please tap the %27I%27m not a robot%21%27 button, within the next%20" + str(int(config.getCustomGroupConfig(self.chat['id'])['unValidatedTimeToKick']/60)) + "%20minutes!%0A%0AOnce done, you%27ll have around%20" + str(config.getCustomGroupConfig(self.chat['id'])['timeToRestrict']) + "%20seconds of full restrictions, then%20" + str(int(config.getCustomGroupConfig(self.chat['id'])['validatedTimeToKick']/60)) + "%20minutes to send a message%20%3A%29"
-			# send welcomeverify prompt to user
-			welcome = sendRequest(["sendMessage", "chat_id", self.chat_id, "text", welcomeMsg, "reply_markup", verifyPrompt])
+			username = newUsers[member['id'] + self.chat['id']]['firstName']
+		# send welcomeverify prompt to user
+		welcomeMsg = "Willkommen, " + username + "in Natürliche Resourcen Aschaffenburg. Diese Gruppe soll für einen nachhaltigen Umgang mit Ressourcen in Aschaffenburg sorgen. Man kann hier nützlichen Sperrmüll, den man irgendwo herumstehen sieht, (incl. Bild und Standort) posten oder alles mögliche zum Verschenken anbieten.%0A%0ABitte klicke innerhalb der nächsten%20" + str(
+		    int(config.getCustomGroupConfig(self.chat['id'])['unValidatedTimeToKick']/60)) + "%20auf den Knopf, um beizutreten. Stelle dich danach bitte kurz vor oder sag einfach Hallo, bevor du Links oder ähnliches senden darfst.%20%3A%29"
+		welcome = sendRequest(["sendMessage", "chat_id", self.chat_id,
+		                      "text", welcomeMsg, "reply_markup", verifyPrompt] + entities)
 		if welcome[0] == True:
 			# add message id of the welcome message, to know what message
 			# to modify/delete later on
@@ -553,12 +557,14 @@ class message_new_callback_query:
 
 				# send new message. If that succeeds, add it to current messages 
 				# shown in chat, then try and delete the last message sent
+				entities = []
 				if newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username'] != None:
-					validatedMessage = "Yay, @" + newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username'] + "%20 has passed validation%21%0A%0ATo ensure you aren%27t just a clever bot that can press buttons, you%27ll be restricted for around another%20" + str(config.getCustomGroupConfig(self.query_message['chat']['id'])['timeToRestrict']) + "%20seconds!"
-					newTextMessageRequest = sendRequest(["sendMessage", "chat_id", self.query_message['chat']['id'], "text", validatedMessage, "entities", "[{'type':'mention', 'offset':5, 'length':" + str(len(newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username'])) + "}]"])
+					username = "@" + newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username']
+					entities = "entities", "[{'type':'mention', 'offset':5, 'length':" + str(len(newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username'])) + "}]"
 				else:
-					validatedMessage = "Yay, " + self.query_from['firstName'] + "%20 has passed validation%21%0A%0ATo ensure you aren%27t just a clever bot that can press buttons, you%27ll be restricted for around another%20" + str(config.getCustomGroupConfig(self.query_message['chat']['id'])['timeToRestrict']) + "%20seconds!"
-					newTextMessageRequest = sendRequest(["sendMessage", "chat_id", self.query_message['chat']['id'], "text", validatedMessage])
+					username = self.query_from['firstName']
+				validatedMessage = "Juchu, " + username + "%20hat richtig geklickt!%21%0A%0AAls weitere Schutzmaßnahme musst du noch für%20" + str(config.getCustomGroupConfig(self.query_message['chat']['id'])['timeToRestrict']) + "%20Sekunden warten."
+				newTextMessageRequest = sendRequest("sendMessage", "chat_id", self.query_message['chat']['id'], "text", validatedMessage + entities)
 
 				if newTextMessageRequest[0] == True:
 					newUsers[self.query_from['id'] + self.query_message['chat']['id']]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
