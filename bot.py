@@ -490,8 +490,8 @@ class message_new_chat_members:
 		else:
 			username = newUsers[member['id'] + self.chat['id']]['firstName']
 		# send welcomeverify prompt to user
-		welcomeMsg = "Willkommen, " + username + "in Natürliche Resourcen Aschaffenburg. Diese Gruppe soll für einen nachhaltigen Umgang mit Ressourcen in Aschaffenburg sorgen. Man kann hier nützlichen Sperrmüll, den man irgendwo herumstehen sieht, (incl. Bild und Standort) posten oder alles mögliche zum Verschenken anbieten.%0A%0ABitte klicke innerhalb der nächsten%20" + str(
-		    int(config.getCustomGroupConfig(self.chat['id'])['unValidatedTimeToKick']/60)) + "%20auf den Knopf, um beizutreten. Stelle dich danach bitte kurz vor oder sag einfach Hallo, bevor du Links oder ähnliches senden darfst.%20%3A%29"
+		welcomeMsg = "Willkommen in »Natürliche Resourcen Aschaffenburg«, " + username + ".%0A%0ADiese Gruppe soll für einen nachhaltigen Umgang mit Ressourcen in Aschaffenburg sorgen. Man kann hier nützlichen Sperrmüll, den man irgendwo herumstehen sieht, (incl. Bild und Standort) posten oder alles mögliche zum Verschenken anbieten.%0A%0ABitte klicke innerhalb der nächsten%20" + str(
+		    int(config.getCustomGroupConfig(self.chat['id'])['unValidatedTimeToKick']/60)) + "%20Minuten auf den Knopf, um beizutreten. Stelle dich danach bitte kurz vor oder sag einfach Hallo, bevor du Links oder ähnliches senden darfst.%20%3A%29"
 		welcome = sendRequest(["sendMessage", "chat_id", self.chat_id,
 		                      "text", welcomeMsg, "reply_markup", verifyPrompt] + entities)
 		if welcome[0] == True:
@@ -678,7 +678,7 @@ def processNewUserList():
 
 				# send new message. If that succeeds, add it to current messages
 				# shown in chat, then try and delete the last message sent
-				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", newUsers[key]['firstName'] + "%20didn%27t press the button in time, and was kicked"])
+				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", newUsers[key]['firstName'] + "%20hat den Bestätigungsknopf nicht rechtzeitig gedrückt und wurde hinausgeworfen."])
 				if newTextMessageRequest[0] == True:
 					newUsers[key]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
 					deleteRequest = sendRequest(["deleteMessage", "chat_id", newUsers[key]['chatId'], "message_id", newUsers[key]['welcomeMsgid'].pop(len(newUsers[key]['welcomeMsgid'])-2)])
