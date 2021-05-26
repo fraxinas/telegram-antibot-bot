@@ -4,7 +4,7 @@ from urllib import parse
 
 def getHelp():
 	print("\nList of options:\n\n" +
-		"-(t)oken of bot to control\n" +
+		"-(c)onfig path to config file\n" +
 		"--help to show this help message\n\n")
 	sys.exit(0)
 
@@ -276,6 +276,17 @@ class commandHandler:
 		except Exception as e:
 			return [False, "Failed to set time to monitor new user's messages for anything prohibited after their first message to " + str(param) + " seconds", str(e)]
 
+	# set adminGroupId
+	def setadmingrpid(self, param, groupConfig):
+		try:
+			#print("old config: ", config.configGroupsData)
+			self.groupConfig['adminGroupId'] = self.param
+			config.setCustomGroupConfig(self.groupConfig)
+			#print("\n\nnew config: ", config.configGroupsData)
+			return [True, "Successfully set Admin Group ID to " + str(param)]
+		except Exception as e:
+			return [False, "Failed to set Admin Group ID to " + str(param), str(e)]
+
 	def disable(self, param, groupConfig):
 		try:
 			self.groupConfig['active'] = False
@@ -490,10 +501,10 @@ class message_new_chat_members:
 		else:
 			username = newUsers[member['id'] + self.chat['id']]['firstName']
 		# send welcomeverify prompt to user
-		welcomeMsg = "Willkommen in »Natürliche Resourcen Aschaffenburg«, " + username + ".%0A%0ADiese Gruppe soll für einen nachhaltigen Umgang mit Ressourcen in Aschaffenburg sorgen. Man kann hier nützlichen Sperrmüll, den man irgendwo herumstehen sieht, (incl. Bild und Standort) posten oder alles mögliche zum Verschenken anbieten.%0A%0ABitte klicke innerhalb der nächsten%20" + str(
-		    int(config.getCustomGroupConfig(self.chat['id'])['unValidatedTimeToKick']/60)) + "%20Minuten auf den Knopf, um beizutreten. Stelle dich danach bitte kurz vor oder sag einfach Hallo, bevor du Links oder ähnliches senden darfst.%20%3A%29"
+		welcomeMsg = "Willkommen in »Natürliche Ressourcen Aschaffenburg«, " + username + ".%0A%0ADiese Gruppe soll für einen nachhaltigen Umgang mit Ressourcen in Aschaffenburg sorgen. Man kann hier nützlichen Sperrmüll, den man irgendwo herumstehen sieht, (incl. Bild und Standort) posten oder alles mögliche zum Verschenken anbieten.%0A%0ABitte klicke innerhalb der nächsten%20" + str(int(config.getCustomGroupConfig(self.chat['id'])['unValidatedTimeToKick']/60)) + "%20Minuten auf den Knopf, um beizutreten. Stelle dich danach bitte kurz vor oder sag einfach Hallo, bevor du Links oder ähnliches senden darfst.%20%3A%29"
 		welcome = sendRequest(["sendMessage", "chat_id", self.chat_id,
-		                      "text", welcomeMsg, "reply_markup", verifyPrompt] + entities)
+                          "text", welcomeMsg, "reply_markup", verifyPrompt, "disable_notification", True] + entities)
+		print("sendRequest welcome returned", welcome)
 		if welcome[0] == True:
 			# add message id of the welcome message, to know what message
 			# to modify/delete later on
@@ -557,21 +568,19 @@ class message_new_callback_query:
 
 				# send new message. If that succeeds, add it to current messages 
 				# shown in chat, then try and delete the last message sent
-				entities = []
 				if newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username'] != None:
 					username = "@" + newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username']
 					entities = "entities", "[{'type':'mention', 'offset':5, 'length':" + str(len(newUsers[self.query_from['id'] + self.query_message['chat']['id']]['username'])) + "}]"
 				else:
 					username = self.query_from['firstName']
+					entities = []  
 				validatedMessage = "Juchu, " + username + "%20hat richtig geklickt!%21%0A%0AAls weitere Schutzmaßnahme musst du noch für%20" + str(config.getCustomGroupConfig(self.query_message['chat']['id'])['timeToRestrict']) + "%20Sekunden warten."
-				newTextMessageRequest = sendRequest("sendMessage", "chat_id", self.query_message['chat']['id'], "text", validatedMessage + entities)
-
+				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", self.query_message['chat']['id'], "text", validatedMessage, "disable_notification", True] + entities)
 				if newTextMessageRequest[0] == True:
 					newUsers[self.query_from['id'] + self.query_message['chat']['id']]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
 					deleteRequest = sendRequest(["deleteMessage", "chat_id", self.query_message['chat']['id'], "message_id", newUsers[self.query_from['id'] + self.query_message['chat']['id']]['welcomeMsgid'].pop(len(newUsers[self.query_from['id'] + self.query_message['chat']['id']]['welcomeMsgid'])-2)])
 					if deleteRequest[0] == False:
 						print("timestamp:", int(time.time()), "Failed to delete message", newUsers[self.query_from['id'] + self.query_message['chat']['id']]['welcomeMsgid'][len(newUsers[self.query_from['id'] + self.query_message['chat']['id']]['welcomeMsgid'])-2], ":", deleteRequest[2])
-
 
 			except Exception as e:
 				print("timestamp:", int(time.time()), "Couldn't edit user", self.query_from['id'], "dictionary entry: ", str(e))
@@ -580,8 +589,8 @@ class message_new_callback_query:
 			# have to respond with an answerCallbackQuery, otherwise the button stays on loading wheel
 			sendRequest(["answerCallbackQuery", "callback_query_id", str(self.query_id) + 'answerFail'])
 
-
-class config:
+config = None
+class Config:
 	def __init__(self, configFilePath):
 		self.configFilePath = configFilePath
 		self.configDefaultGroupData = None
@@ -597,7 +606,7 @@ class config:
 				return [False, "Error parsing the config file: " + str(e)]
 
 	def loadBotConfig(self):
-		varsToLoad = ["msgOffset", "pollTimeout", "whiteListFile"]
+		varsToLoad = ["msgOffset", "pollTimeout", "whiteListFile", "token"]
 		if 'config' in self.configData:
 			try:
 				for var in varsToLoad:
@@ -645,7 +654,7 @@ class config:
 		self.writeConfig()
 
 	def writeConfig(self):
-		with open('config.txt', 'w') as configFile:
+		with open(self.configFilePath, 'w') as configFile:
 			try:
 				json.dump(self.configData, configFile, indent=4)
 			except Exception as e:
@@ -678,14 +687,10 @@ def processNewUserList():
 
 				# send new message. If that succeeds, add it to current messages
 				# shown in chat, then try and delete the last message sent
-				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", newUsers[key]['firstName'] + "%20hat den Bestätigungsknopf nicht rechtzeitig gedrückt und wurde hinausgeworfen."])
-				if newTextMessageRequest[0] == True:
-					newUsers[key]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
-					deleteRequest = sendRequest(["deleteMessage", "chat_id", newUsers[key]['chatId'], "message_id", newUsers[key]['welcomeMsgid'].pop(len(newUsers[key]['welcomeMsgid'])-2)])
-					if deleteRequest[0] == False:
-						print("timestamp:", int(time.time()), "Failed to delete message", newUsers[key]['welcomeMsgid'][len(newUsers[key]['welcomeMsgid'])-2], ":", deleteRequest[2])
+				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", config.getCustomGroupConfig(newUsers[key]['chatId'])['adminGroupId'], "text", newUsers[key]['firstName'] + "%20hat den Bestätigungsknopf nicht rechtzeitig gedrückt und wurde hinausgeworfen."])
 				# kick user
 				kickRequest = sendRequest(["unbanChatMember", "chat_id", newUsers[key]['chatId'], "user_id", newUsers[key]['id']])
+				print("hat nicht geclickt...", newTextMessageRequest, "groupid:", config.getCustomGroupConfig(newUsers[key]['chatId'])['adminGroupId'])
 				if kickRequest[0] == False:
 					# if the kick didn't work, try banning instead
 					print("timestamp:", int(time.time()), "Failed to kick, attempting to ban...")
@@ -743,12 +748,7 @@ def processNewUserList():
 
 				# send new message. If that succeeds, add it to current messages
 				# shown in chat, then try and delete the last message sent
-				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", newUsers[key]['firstName'] + "%20didn%27t say anything in the time threshold, and was kicked"])
-				if newTextMessageRequest[0] == True:
-					newUsers[key]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
-					deleteRequest = sendRequest(["deleteMessage", "chat_id", newUsers[key]['chatId'], "message_id", newUsers[key]['welcomeMsgid'].pop(len(newUsers[key]['welcomeMsgid'])-2)])
-					if deleteRequest[0] == False:
-						print("timestamp:", int(time.time()), "Failed to delete message", newUsers[key]['welcomeMsgid'][len(newUsers[key]['welcomeMsgid'])-2], ":", deleteRequest[2])
+				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", config.getCustomGroupConfig(newUsers[key]['chatId'])['adminGroupId'], "text", newUsers[key]['firstName'] + "%20hat keine Vorstellungsnachricht geschickt und wurde hinausgeworfen."])
 
 				# kick user
 				kickRequest = sendRequest(["unbanChatMember", "chat_id", newUsers[key]['chatId'], "user_id", newUsers[key]['id']])
@@ -784,16 +784,17 @@ def processNewUserList():
 					# send new message. If that succeeds, add it to current messages
 					# shown in chat, then try and delete the last message sent
 					if newUsers[key]['username'] != None:
-						newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", "@" + newUsers[key]['username'] + ",%20your restriction time is over!%0A%0APlease send a plain text message like a hello within the next%20" + str(int(groupInfo['validatedTimeToKick']/60)) + "%20minutes, to lift your other restrictions%0A%0A%28I%27d let you send a sticker if the bot API allowed just text and stickers%29%20%3A%29%0A%0ANote%3A Sending any of the following may get you banned - URL, Email, Phone Number, Forwarded Message, Contact, Location or a Bot Command", "entities", "[{'type':'mention', 'offset':0, 'length':" + str(len(newUsers[key]['username'])) + "}]"])
+						username = "@" + newUsers[key]['username']
 					else:
-						newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", newUsers[key]['firstName'] + ",%20your restriction time is over!%0A%0APlease send a plain text message like a hello within the next%20" + str(int(groupInfo['validatedTimeToKick']/60)) + "%20minutes, to lift your other restrictions%0A%0A%28I%27d let you send a sticker if the bot API allowed just text and stickers%29%20%3A%29%0A%0ANote%3A Sending any of the following may get you banned - URL, Email, Phone Number, Forwarded Message, Contact, Location or a Bot Command"])
+						username = newUsers[key]['firstName']
+					newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "disable_notification", True, "text", username + ",%20deine Karenzzeit ist vorüber!%0A%0ABitte sag in der Gruppe in den nächsten%20" + str(int(groupInfo['validatedTimeToKick']/60)) + "%20Minuten »Hallo« oder stelle dich kurz vor. Anschließend kannst du auch Fotos etc. verschicken. Achtung, aus Spamschutzgründen dürfen bis dahin keine URLs (Links), Mail-Adressen, Telefonnummern, weitergeleitete Nachrichten, Kontakte oder Standorte gesendet werden."])
+					permEditRequest = sendRequest(["restrictChatMember", "chat_id", newUsers[key]['chatId'], "user_id", newUsers[key]['id'], "permissions", newMemberRestrictions, "until_date", currentUnixTime])
 					if newTextMessageRequest[0] == True:
 						newUsers[key]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
 						deleteRequest = sendRequest(["deleteMessage", "chat_id", newUsers[key]['chatId'], "message_id", newUsers[key]['welcomeMsgid'].pop(len(newUsers[key]['welcomeMsgid'])-2)])
-						if deleteRequest[0] == False:
-							print("timestamp:", int(time.time()), "Failed to delete message", newUsers[key]['welcomeMsgid'][len(newUsers[key]['welcomeMsgid'])-2], ":", deleteRequest[2])
+					if deleteRequest[0] == False:
+						print("timestamp:", int(time.time()), "Failed to delete message", newUsers[key]['welcomeMsgid'][len(newUsers[key]['welcomeMsgid'])-2], ":", deleteRequest[2])
 
-					permEditRequest = sendRequest(["restrictChatMember", "chat_id", newUsers[key]['chatId'], "user_id", newUsers[key]['id'], "permissions", newMemberRestrictions, "until_date", currentUnixTime])
 					if permEditRequest[0] == True:
 						newUsers[key]['hasSetTextRestrictions'] = True
 						newUsers[key]['timeSetTextRestrictions'] = currentUnixTime
@@ -818,12 +819,7 @@ def processNewUserList():
 
 				# send new message. If that succeeds, add it to current messages
 				# shown in chat, then try and delete the last message sent
-				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", newUsers[key]['firstName'] + "%20sent something not permitted for their first message, and was banned"])
-				if newTextMessageRequest[0] == True:
-					newUsers[key]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
-					deleteRequest = sendRequest(["deleteMessage", "chat_id", newUsers[key]['chatId'], "message_id", newUsers[key]['welcomeMsgid'].pop(len(newUsers[key]['welcomeMsgid'])-2)])
-					if deleteRequest[0] == False:
-						print("timestamp:", int(time.time()), "Failed to delete message", newUsers[key]['welcomeMsgid'][len(newUsers[key]['welcomeMsgid'])-2], ":", deleteRequest[2])
+				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", config.getCustomGroupConfig(newUsers[key]['chatId'])['adminGroupId'], "text", newUsers[key]['firstName'] + "%20hat als erstes eine unerwünschte Nachricht gesendet und wurde gebannt."])
 
 				banRequest = sendRequest(["kickChatMember", "chat_id", newUsers[key]['chatId'], "user_id", newUsers[key]['id']])
 				if banRequest[0] == False:
@@ -842,9 +838,10 @@ def processNewUserList():
 				# send new message. If that succeeds, add it to current messages
 				# shown in chat, then try and delete the last message sent
 				if newUsers[key]['username'] != None:
-					newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", "Welcome @" + newUsers[key]['username'] + "%21 %0A%0APlease refrain from sending any forwarded messages, locations or contacts here for another " + str(int((groupInfo['timeToRestrictForwards']/60)+1)) + " minutes%21 %28When this message is deleted%29", "entities", "[{'type':'mention', 'offset':8, 'length':" + str(len(newUsers[key]['username'])) + "}]"])
+					username = "@" + newUsers[key]['username']
 				else:
-					newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "text", "Welcome " + newUsers[key]['firstName'] + "%21 %0A%0APlease refrain from sending any forwarded messages, locations or contacts here for another " + str(int((groupInfo['timeToRestrictForwards']/60)+1)) + " minutes%21 %28When this message is deleted%29"])
+					username = newUsers[key]['firstName']
+				newTextMessageRequest = sendRequest(["sendMessage", "chat_id", newUsers[key]['chatId'], "disable_notification", True, "text", "Willkommen, " + username + "%21 %0A%0ABitte sieh in den nächsten " + str(int((groupInfo['timeToRestrictForwards']/60)+1)) + " Minuten davon ab, weitergeleitete Nachrichten, Standorte oder Kontakte zu senden!%21 %28(So lange bis diese Nachricht verschwindet)%29"])
 				if newTextMessageRequest[0] == True:
 					newUsers[key]['welcomeMsgid'].append(json.loads(newTextMessageRequest[2])['result']['message_id'])
 					deleteRequest = sendRequest(["deleteMessage", "chat_id", newUsers[key]['chatId'], "message_id", newUsers[key]['welcomeMsgid'].pop(len(newUsers[key]['welcomeMsgid'])-2)])
@@ -932,50 +929,50 @@ def readIntFileToList(path):
 	else:
 		return [False, []]
 
-
 if __name__ == '__main__':
 	# initial token value
 	token = ""
 	argv = sys.argv[1:]
 
 	# try getting supported parameters and args from command line
-	try:
-		opts, args = getopt.getopt(argv, "t:",
-			["token=", "help"])
-	except:
+	if not argv:
 		print("Error parsing options")
 		getHelp()
 
+	opts, args = getopt.getopt(argv, "c:", ["config=", "help"])
+
 	for opt, arg in opts:
-		if opt in ['-t', '--token']:
+		if opt in ['-c', '--config']:
 			try:
-				# connect to Telegram API with their getMe test method for checking API works
-				testResponse = requests.get("https://api.telegram.org/bot%s/getMe" % (str(arg)))
-				# set the token to be used if we get a 2xx response code back
-				if testResponse.ok:
-					token = str(arg)
-				else:
-					print("Error validating your token!")
-					getHelp()
-			except:
-				print("Error trying to validate your token!")
+				config = Config(str(arg))
+			except Exception as e:
+				print("Error loading config file", e)
 				getHelp()
 		if opt in ['--help']:
 			getHelp()
 	print("--------------------------------------\nProgram started at UNIX time:", int(time.time()), "\n")
 
 	# load configurations
-	config = config('config.txt')
 	print(config.loadConfig()[1])
+
 	botConfLoad = config.loadBotConfig()
 	defaultConfLoad = config.loadDefaultGroupConfig()
 	customConfLoad = config.loadGroupConfigs()
+	try:
+		# connect to Telegram API with their getMe test method for checking API works
+		testResponse = requests.get("https://api.telegram.org/bot%s/getMe" % (token))
+		# set the token to be used if we get a 2xx response code back
+		if not testResponse.ok:
+			print("Error validating your token!")
+			getHelp()
+	except:
+		print("Error trying to validate your token!")
+		getHelp()
 	# if the bot, default group or custom group configs can't be found
 	# stop program, needs to be fixed
 	if not botConfLoad[0] or not defaultConfLoad[0] or not customConfLoad[0]:
 		print("Bot config: ", botConfLoad[1], "Default config: ", defaultConfLoad[1], "Custom group config: ", customConfLoad[1])
 		sys.exit(0)
-
 
 	# dictionary of new users who need to be kept track of until
 	# new user requirements are satisfied
